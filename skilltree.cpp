@@ -16,6 +16,7 @@ struct NodeData{
 	bool flag = false;
 	bool done = false;
 	std::string parentname;
+	std::string description;
 };
 
 //Initializing some default/global values used in the program.
@@ -102,7 +103,39 @@ NodeData requestNode(bool* stopping = &fakeStop, short count = 1){
 	NodeData data;
 	if(enterFeature<std::string>(&data.name, "Enter the name for your skill: ", count)){*stopping=true;return defaultval;};
 	if(enterFeature<std::string>(&data.difficulty, "Enter the difficulty for your skill: ", count)){*stopping=true;return defaultval;};
+	if(enterFeature<std::string>(&data.description, "Enter the short description for your skill: ", count)){*stopping=true;return defaultval;};
 	return data;
+}
+
+//Asks the user to enter a choice given a mapping detailing choices and their respective values that must be entered for them to select that choice.
+int invokeUser(std::vector<std::string> QuestionMapping, bool mode = false){
+	std::string choice = "";
+	if (!mode){
+		std::string prompt = "\n";
+		for (unsigned short i = 0; i < QuestionMapping.size();i+=2){
+			prompt += QuestionMapping[i] + ". " + QuestionMapping[i+1] + "\n";
+		}
+		std::cout << prompt << std::endl;
+		std::getline(std::cin, choice);
+		std::vector<std::string>::iterator it = std::find(QuestionMapping.begin(), QuestionMapping.end(), choice);
+		if (it != QuestionMapping.end()){
+			return std::stoi(*it);
+		}
+		else {
+			return -1;
+		}
+	}
+	else {
+		std::cout << "Please re-enter your choice: ";
+		std::getline(std::cin, choice);
+		std::vector<std::string>::iterator it = std::find(QuestionMapping.begin(), QuestionMapping.end(), choice);
+		if (it != QuestionMapping.end()){
+			return std::stoi(*it);
+		}
+		else {
+			return -1;
+		}
+	}
 }
 
 //Class definition to store information and operations associated with the skills.
@@ -183,6 +216,27 @@ public:
 		if (*isFoundNode){
 			std::cout << "\nSkill found! Your new skill has been saved.\n";
 			isFoundNode->Children.push_back(item);
+			isFoundNode->data.flag = false;
+		}
+	}
+
+	//Allows a user to change a characteristic of a skill.
+	void Update(std::vector<Node>* rootNodes){
+		int choice;
+		std::string newVal;
+		Node* isFoundNode = this->findNode("What skill would you like to modify: ");
+		std::cout << "What characteristic would you like to modify: " << std::endl;
+		std::vector<std::string> modifyMapping = {"1","Name", "2", "Difficulty", "3", "Description"};
+		std::vector<std::string*> characteristicMapping = {&(isFoundNode->data.name), &(isFoundNode->data.difficulty), &(isFoundNode->data.description)};
+		if (*isFoundNode){
+			choice = invokeUser(modifyMapping);
+			while (choice < 0){
+				choice = invokeUser(modifyMapping, true);
+			}
+			std::cout << "What is your new value: ";
+			std::getline(std::cin, newVal);
+			*characteristicMapping[choice-1] = newVal; 
+			std::cout << (char)10 << "Characteristic updated" << (char)10;
 			isFoundNode->data.flag = false;
 		}
 	}
@@ -295,12 +349,13 @@ void Clear(bool* selectedroots, Node* baseroot, std::ofstream* writestream, bool
 }
 
 //Given data, forms a string in some format which can be extracted later.
-std::string fillTemplate(std::string name, std::string diff, std::string stage, std::string parentname, bool done){
+std::string fillTemplate(std::string name, std::string diff, std::string stage, std::string parentname, std::string description, bool done){
 	std::string entry = "";
 	entry += "{"+name + "} ";
 	entry += "{"+diff + "} ";
 	entry += "{"+stage + "} ";
 	entry += "{"+parentname + "} ";
+	entry += "{"+description+ "} ";
 	if (done){entry += "{1}\n";}
 	else {entry += "{0}\n";}
 	return entry;
@@ -308,15 +363,6 @@ std::string fillTemplate(std::string name, std::string diff, std::string stage, 
 
 //Saves the data collected in a session.
 void Save(bool* selectedroots,Node* originalroot, std::ofstream* savestream, std::vector<Node>* nodelist, std::ifstream* readstream){
-	std::string currentNodeInfo;
-	std::vector<std::string> previous = {};
-	while (std::getline(*readstream, currentNodeInfo)){
-		if (currentNodeInfo == ""){break;}
-		if ((int)currentNodeInfo[0] >= 48 && (int)currentNodeInfo[0] <= 57){continue;}
-		std::vector<std::string> extracted = Extract(currentNodeInfo);
-		currentNodeInfo = fillTemplate(extracted[4], extracted[0], extracted[1], extracted[2], std::stoi(extracted[3]));
-		previous.push_back(currentNodeInfo);
-	}
 	std::string savedata = "";
 	Clear(selectedroots, originalroot, savestream, true);
 	std::ofstream temporaryStream(globalDataName);
@@ -327,10 +373,7 @@ void Save(bool* selectedroots,Node* originalroot, std::ofstream* savestream, std
 		temporaryStream << "0" << std::endl;
 	}
 	for (auto node:*nodelist){
-		savedata = fillTemplate(node.data.name, node.data.difficulty, std::to_string(node.data.stage), node.data.parentname, node.data.done);
-		if (std::find(previous.begin(), previous.end(), savedata) != previous.end()){
-			continue;
-		}
+		savedata = fillTemplate(node.data.name, node.data.difficulty, std::to_string(node.data.stage), node.data.parentname,node.data.description,node.data.done);
 		temporaryStream << savedata;
 		savedata = "";
 	}
@@ -351,9 +394,10 @@ void Load(Node* baseroot, bool* rootsSelected){
 		std::vector<std::string> extractedData = Extract(currentNodeInfo);
 		currentNodeData.difficulty = extractedData[0];
 		currentNodeData.stage = std::stoi(extractedData[1]);
-		currentNodeData.name = extractedData[4];
 		currentNodeData.parentname = extractedData[2];
-		currentNodeData.done = std::stoi(extractedData[3]);
+		currentNodeData.description = extractedData[3];
+		currentNodeData.done = std::stoi(extractedData[4]);
+		currentNodeData.name = extractedData[5];
 		Node newNode(currentNodeData);
 		nodes.push_back(newNode);
 	}
@@ -370,37 +414,6 @@ void Load(Node* baseroot, bool* rootsSelected){
 					FoundNode->data.flag = false;
 				}
 			}
-		}
-	}
-}
-
-//Asks the user to enter a choice given a mapping detailing choices and their respective values that must be entered for them to select that choice.
-int invokeUser(std::vector<std::string> QuestionMapping, bool mode = false){
-	std::string choice = "";
-	if (!mode){
-		std::string prompt = "\n";
-		for (unsigned short i = 0; i < QuestionMapping.size();i+=2){
-			prompt += QuestionMapping[i] + ". " + QuestionMapping[i+1] + "\n";
-		}
-		std::cout << prompt << std::endl;
-		std::getline(std::cin, choice);
-		std::vector<std::string>::iterator it = std::find(QuestionMapping.begin(), QuestionMapping.end(), choice);
-		if (it != QuestionMapping.end()){
-			return std::stoi(*it);
-		}
-		else {
-			return -1;
-		}
-	}
-	else {
-		std::cout << "Please re-enter your choice: ";
-		std::getline(std::cin, choice);
-		std::vector<std::string>::iterator it = std::find(QuestionMapping.begin(), QuestionMapping.end(), choice);
-		if (it != QuestionMapping.end()){
-			return std::stoi(*it);
-		}
-		else {
-			return -1;
 		}
 	}
 }
@@ -455,9 +468,9 @@ void StartBuilding(bool* selectedroots, Node* baseroot, std::ofstream* writestre
 			count++;
 		}	
 	}
-	std::vector<std::string> buildMapping = {"1", "Add Node", "2", "Delete Node", "3", "Mark a node as done", "4", "Exit"};
+	std::vector<std::string> buildMapping = {"1", "Add Node","2", "Update a skill","3", "Delete skill","4", "Mark a skill as done","5", "Exit"};
 	int exitnum = std::stoi(buildMapping[buildMapping.size()-2]);
-	std::vector<std::function<void(std::vector<Node>*)>> buildFunctions = {[=](std::vector<Node>* bT){baseroot->Push(bT);}, [=](std::vector<Node>* bT){baseroot->Delete(bT);}, [=](std::vector<Node>* bT){baseroot->Done(bT);},[=](std::vector<Node>* bT){baseroot->Exit(bT);}};
+	std::vector<std::function<void(std::vector<Node>*)>> buildFunctions = {[=](std::vector<Node>* bT){baseroot->Push(bT);},[=](std::vector<Node>* bT){baseroot->Update(bT);} ,[=](std::vector<Node>* bT){baseroot->Delete(bT);}, [=](std::vector<Node>* bT){baseroot->Done(bT);},[=](std::vector<Node>* bT){baseroot->Exit(bT);}};
 	while (choice != exitnum){
 		choice = invokeUser(buildMapping);
 		while (choice < 0){
@@ -481,6 +494,7 @@ void presentNode(Node item){
 	std::cout << "NAME: " << item.data.name << std::endl;
 	std::cout << "DIFFICULTY: " << item.data.difficulty << std::endl;
 	std::cout << "PARENT: " << item.data.parentname << std::endl;
+	std::cout << "DESCRIPTION: " << item.data.description << std::endl;
 	if (item.data.done){
 		std::cout << "STATUS: " << "DONE" << std::endl;
 	}
