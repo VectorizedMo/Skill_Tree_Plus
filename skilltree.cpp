@@ -335,15 +335,20 @@ template <typename T> std::vector<T> retrieveFromBounds(std::vector<T> mainvec,i
 	return toReturn;
 }
 
+//Traverses through the tree and in doing so builds up a vector object with information about the skills in the skill tree.
+void buildTree(Node* baseRoot, std::vector<Node>* nodelist, short stage = 0, Node* parentnode = nullptr){
+	if (stage>0){baseRoot->data.stage=stage;baseRoot->data.parentname = parentnode->data.name;nodelist->push_back(*baseRoot);}
+	for (auto element:baseRoot->Children){
+		buildTree(&element, nodelist, stage+1, baseRoot);
+	}
+}
+
 //Clears the data file.
 void Clear(bool* selectedroots, Node* baseroot, std::ofstream* writestream, bool mode = false){
 	if (!mode){
 		std::cout << "CLEARING";
 	    *selectedroots = false;
-		std::vector<Node> emptyVec = {};
-	    for (auto node: baseroot->Children){
-			node.Children = emptyVec;
-		}
+		baseroot->Children.clear();
 	}
 	std::filesystem::remove(globalDataName);
 }
@@ -362,9 +367,11 @@ std::string fillTemplate(std::string name, std::string diff, std::string stage, 
 }
 
 //Saves the data collected in a session.
-void Save(bool* selectedroots,Node* originalroot, std::ofstream* savestream, std::vector<Node>* nodelist, std::ifstream* readstream){
+void Save(bool* selectedroots,Node* originalroot, std::ofstream* savestream,std::ifstream* readstream){
 	std::string savedata = "";
+	std::vector<Node> nodelist = {};
 	Clear(selectedroots, originalroot, savestream, true);
+	buildTree(originalroot, &nodelist);
 	std::ofstream temporaryStream(globalDataName);
 	if (*selectedroots){
 		temporaryStream << "1" << std::endl;
@@ -372,7 +379,7 @@ void Save(bool* selectedroots,Node* originalroot, std::ofstream* savestream, std
 	else {
 		temporaryStream << "0" << std::endl;
 	}
-	for (auto node:*nodelist){
+	for (auto node:nodelist){
 		savedata = fillTemplate(node.data.name, node.data.difficulty, std::to_string(node.data.stage), node.data.parentname,node.data.description,node.data.done);
 		temporaryStream << savedata;
 		savedata = "";
@@ -480,14 +487,6 @@ void StartBuilding(bool* selectedroots, Node* baseroot, std::ofstream* writestre
 	}
 }
 
-//Traverses through the tree and in doing so builds up a vector object with information about the skills in the skill tree.
-void buildTree(Node* baseRoot, std::vector<Node>* nodelist, short stage = 0, Node* parentnode = nullptr){
-	if (stage>0){baseRoot->data.stage=stage;baseRoot->data.parentname = parentnode->data.name;nodelist->push_back(*baseRoot);}
-	for (auto element:baseRoot->Children){
-		buildTree(&element, nodelist, stage+1, baseRoot);
-	}
-}
-
 //Presents information about a skill.
 void presentNode(Node item){
 	std::cout << (char)10;
@@ -517,14 +516,12 @@ void ViewTree(bool* selectedroots, Node* baseroot, std::ofstream* writestream, b
 //Exits the program, also allows the user to save their data before exiting.
 void Exit(bool* selectedroots, Node* baseroot, std::ofstream* WriteStream, bool mode = false){
 	std::ifstream readstream(globalDataName);
-	std::vector<Node> nodes = {};
 	std::string savechoice;
 	std::cout << (char)10 << "Would you like to save your data: ";
 	std::getline(std::cin, savechoice);
 	if (!inString(savechoice, "no")){
 		std::cout << "Saving...\n";
-		buildTree(baseroot, &nodes);
-		Save(selectedroots,baseroot, WriteStream, &nodes, &readstream);
+		Save(selectedroots,baseroot, WriteStream, &readstream);
 	}
 }
 
